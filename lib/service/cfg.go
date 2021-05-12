@@ -852,8 +852,8 @@ func ApplyDefaults(cfg *Config) {
 	cfg.Auth.SSHAddr = *defaults.AuthListenAddr()
 	cfg.Auth.StorageConfig.Type = lite.GetName()
 	cfg.Auth.StorageConfig.Params = backend.Params{defaults.BackendPath: filepath.Join(cfg.DataDir, defaults.BackendDir)}
-	cfg.Auth.StaticTokens = services.DefaultStaticTokens()
-	cfg.Auth.ClusterConfig = services.DefaultClusterConfig()
+	cfg.Auth.StaticTokens = types.DefaultStaticTokens()
+	cfg.Auth.ClusterConfig = types.DefaultClusterConfig()
 	cfg.Auth.NetworkingConfig = types.DefaultClusterNetworkingConfig()
 	cfg.Auth.SessionRecordingConfig = types.DefaultSessionRecordingConfig()
 	cfg.Auth.Preference = types.DefaultAuthPreference()
