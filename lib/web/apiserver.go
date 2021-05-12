@@ -1242,7 +1242,10 @@ func newSessionResponse(ctx *SessionContext) (*CreateSessionResponse, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	token := ctx.getToken()
+	token, err := ctx.getToken()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 	user, err := clt.GetUser(ctx.GetUser(), false)
 	if err != nil {
 		return nil, trace.Wrap(err)

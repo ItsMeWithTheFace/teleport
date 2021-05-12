@@ -271,7 +271,7 @@ func (s *InstanceSecrets) GetRoles() []types.Role {
 // case we always return hard-coded userCA + hostCA (and they share keys
 // for simplicity)
 func (s *InstanceSecrets) GetCAs() []types.CertAuthority {
-	hostCA := types.NewCertAuthority(types.CertAuthoritySpecV2{
+	hostCA, _ := types.NewCertAuthority(types.CertAuthoritySpecV2{
 		Type:         types.HostCA,
 		ClusterName:  s.SiteName,
 		SigningKeys:  [][]byte{s.PrivKey},
@@ -281,7 +281,7 @@ func (s *InstanceSecrets) GetCAs() []types.CertAuthority {
 	})
 	hostCA.SetTLSKeyPairs([]types.TLSKeyPair{{Cert: s.TLSCACert, Key: s.PrivKey}})
 
-	userCA := types.NewCertAuthority(types.CertAuthoritySpecV2{
+	userCA, _ := types.NewCertAuthority(types.CertAuthoritySpecV2{
 		Type:         types.UserCA,
 		ClusterName:  s.SiteName,
 		SigningKeys:  [][]byte{s.PrivKey},
@@ -540,9 +540,11 @@ func (i *TeleInstance) GenerateConfig(trustedSecrets []*InstanceSecrets, tconf *
 		tconf.Auth.Roles = append(tconf.Auth.Roles, trusted.GetRoles()...)
 		tconf.Identities = append(tconf.Identities, trusted.GetIdentity())
 		if trusted.ListenAddr != "" {
-			tconf.ReverseTunnels = []types.ReverseTunnel{
-				types.NewReverseTunnel(trusted.SiteName, []string{trusted.ListenAddr}),
+			rt, err := types.NewReverseTunnel(trusted.SiteName, []string{trusted.ListenAddr})
+			if err != nil {
+				return nil, trace.Wrap(err)
 			}
+			tconf.ReverseTunnels = []types.ReverseTunnel{rt}
 		}
 	}
 	tconf.Proxy.ReverseTunnelListenAddr.Addr = i.Secrets.ListenAddr
