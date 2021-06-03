@@ -34,6 +34,7 @@ import (
 	"github.com/gravitational/teleport/lib/srv/db/mysql"
 	"github.com/gravitational/teleport/lib/srv/db/postgres"
 	"github.com/gravitational/teleport/lib/utils"
+	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 
 	gcpcredentials "cloud.google.com/go/iam/credentials/apiv1"
 	"github.com/aws/aws-sdk-go/aws"
@@ -73,6 +74,8 @@ type Config struct {
 	OnHeartbeat func(error)
 	// GCPIAM allows to override GCP IAM client used in tests.
 	GCPIAM *gcpcredentials.IamCredentialsClient
+	// CloudSQL allows to override GCP Cloud SQL client used in tests.
+	CloudSQL *sqladmin.Service
 }
 
 type (
@@ -219,13 +222,29 @@ func (s *Server) initCloudClients(ctx context.Context, server types.DatabaseServ
 		}
 		s.awsSessions[region] = session
 	case types.DatabaseTypeCloudSQL:
-		if s.cfg.GCPIAM != nil {
-			return nil // Already initialized.
-		}
-		s.cfg.GCPIAM, err = gcpcredentials.NewIamCredentialsClient(ctx)
-		if err != nil {
-			return trace.Wrap(err, "failed to initialize GCP IAM client for database %q",
-				server.GetName())
+		switch server.GetProtocol() {
+		case defaults.ProtocolPostgres:
+			// For Cloud SQL Postgres initialize IAM client to be able to
+			// generate IAM tokens for IAM authentication.
+			if s.cfg.GCPIAM != nil {
+				return nil // Already initialized.
+			}
+			s.cfg.GCPIAM, err = gcpcredentials.NewIamCredentialsClient(ctx)
+			if err != nil {
+				return trace.Wrap(err, "failed to initialize GCP IAM client for database %q",
+					server.GetName())
+			}
+		case defaults.ProtocolMySQL:
+			// For Cloud SQL MySQL initialize Cloud SQL Admin client to be
+			// able to update users' passwords since there's no IAM auth.
+			if s.cfg.CloudSQL != nil {
+				return nil // Already initialized.
+			}
+			s.cfg.CloudSQL, err = sqladmin.NewService(ctx)
+			if err != nil {
+				return trace.Wrap(err, "failed to initialize GCP Cloud SQL client for database %q",
+					server.GetName())
+			}
 		}
 	default:
 		// For other types of databases e.g. self-hosted we don't need to
@@ -430,6 +449,7 @@ func (s *Server) dispatch(sessionCtx *common.Session, streamWriter events.Stream
 		AuthClient: s.cfg.AuthClient,
 		AWSSession: s.awsSessions[sessionCtx.Server.GetAWS().Region],
 		GCPIAM:     s.cfg.GCPIAM,
+		CloudSQL:   s.cfg.CloudSQL,
 		Clock:      s.cfg.Clock,
 	})
 	if err != nil {
@@ -452,11 +472,12 @@ func (s *Server) dispatch(sessionCtx *common.Session, streamWriter events.Stream
 		}, nil
 	case defaults.ProtocolMySQL:
 		return &mysql.Engine{
-			Auth:    auth,
-			Audit:   audit,
-			Context: s.closeContext,
-			Clock:   s.cfg.Clock,
-			Log:     sessionCtx.Log,
+			Auth:       auth,
+			Audit:      audit,
+			AuthClient: s.cfg.AuthClient,
+			Context:    s.closeContext,
+			Clock:      s.cfg.Clock,
+			Log:        sessionCtx.Log,
 		}, nil
 	}
 	return nil, trace.BadParameter("unsupported database protocol %q",

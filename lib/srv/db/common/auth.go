@@ -22,11 +22,15 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/types"
+	"github.com/gravitational/teleport/lib/auth"
 	libauth "github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/auth/native"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/tlsca"
 	"github.com/gravitational/teleport/lib/utils"
 
@@ -36,6 +40,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/redshift"
 
 	gcpcredentials "cloud.google.com/go/iam/credentials/apiv1"
+	"google.golang.org/api/googleapi"
+	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 	gcpcredentialspb "google.golang.org/genproto/googleapis/iam/credentials/v1"
 
 	"github.com/gravitational/trace"
@@ -51,6 +57,8 @@ type Auth interface {
 	GetRedshiftAuthToken(sessionCtx *Session) (string, string, error)
 	// GetCloudSQLAuthToken generates Cloud SQL auth token.
 	GetCloudSQLAuthToken(ctx context.Context, sessionCtx *Session) (string, error)
+	// GetCloudSQLPassword generates password for a Cloud SQL database user.
+	GetCloudSQLPassword(ctx context.Context, sessionCtx *Session) (string, error)
 	// GetTLSConfig builds the client TLS configuration for the session.
 	GetTLSConfig(ctx context.Context, sessionCtx *Session) (*tls.Config, error)
 	// GetAuthPreference returns the cluster authentication config.
@@ -67,6 +75,8 @@ type AuthConfig struct {
 	// GCPIAM is the GCP IAM client used to generate GCP auth tokens.
 	// May be empty when not proxying any Cloud SQL databases.
 	GCPIAM *gcpcredentials.IamCredentialsClient
+	// CloudSQL is the GCP Cloud SQL client.
+	CloudSQL *sqladmin.Service
 	// Clock is the clock implementation.
 	Clock clockwork.Clock
 	// Log is used for logging.
@@ -170,6 +180,68 @@ func (a *dbAuth) GetCloudSQLAuthToken(ctx context.Context, sessionCtx *Session) 
 		return "", trace.Wrap(err)
 	}
 	return resp.AccessToken, nil
+}
+
+// GetCloudSQLPassword updates the specified database user's password to a
+// random value using GCP Cloud SQL Admin API.
+//
+// It is used to generate a one-time password when connecting to GCP MySQL
+// databases which don't support IAM authentication.
+func (a *dbAuth) GetCloudSQLPassword(ctx context.Context, sessionCtx *Session) (string, error) {
+	if a.cfg.CloudSQL == nil {
+		return "", trace.BadParameter("GCP Cloud SQL client is not initialized")
+	}
+	a.cfg.Log.Debugf("Generating GCP user password for %s.", sessionCtx)
+	token, err := utils.CryptoRandomHex(auth.TokenLenBytes)
+	if err != nil {
+		return "", trace.Wrap(err)
+	}
+	// Cloud SQL will return 409 to a user update operation if there is another
+	// one in progress, so retry upon encountering it. Also, be nice to the API
+	// and retry with a backoff.
+	retry, err := utils.NewConstant(time.Second)
+	if err != nil {
+		return "", trace.Wrap(err)
+	}
+	retryCtx, cancel := context.WithTimeout(ctx, defaults.DatabaseConnectTimeout)
+	defer cancel()
+	err = retry.For(retryCtx, func() error {
+		return a.updateCloudSQLUser(ctx, sessionCtx, &sqladmin.User{
+			Password: token,
+		})
+	}, func(err error) bool {
+		e, ok := trace.Unwrap(err).(*googleapi.Error)
+		return ok && e.Code == http.StatusConflict // We only want to retry on 409.
+	})
+	if err != nil {
+		return "", trace.Wrap(err)
+	}
+	return token, nil
+}
+
+// updateCloudSQLUser makes a request to Cloud SQL API to update the provided user.
+func (a *dbAuth) updateCloudSQLUser(ctx context.Context, sessionCtx *Session, user *sqladmin.User) error {
+	// The user update API, despite being documented as "updates an existing
+	// user", will actually create a new user if the specified user does not
+	// exist. This means that this will swallow *any* username, set a password
+	// for it and will let user connect if, for example, they made a typo in
+	// the username.
+	//
+	// Ideally, the API would return an error in case of invalid username. The
+	// other option is to use "list" call to check whether the username exists
+	// ourselves but that would introduce even larger latency to the initial
+	// connect time. So as a trade-off, don't check the username here - instead
+	// recommend users to restrict allowed username using RBAC so it would get
+	// filtered out even before getting here during authz checks.
+	//
+	// Even in case this happens and invalid username gets here (e.g. someone's
+	// role allows "*"), the created user will have minimal privileges within
+	// the database so there would not be any security implications.
+	_, err := a.cfg.CloudSQL.Users.Update(
+		sessionCtx.Server.GetGCP().ProjectID,
+		sessionCtx.Server.GetGCP().InstanceID,
+		user).Name(sessionCtx.DatabaseUser).Host("%").Context(ctx).Do()
+	return trace.Wrap(err)
 }
 
 // GetTLSConfig builds the client TLS configuration for the session.

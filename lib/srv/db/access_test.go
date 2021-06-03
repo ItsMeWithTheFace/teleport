@@ -45,6 +45,7 @@ import (
 	"github.com/siddontang/go-mysql/client"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/option"
+	sqladmin "google.golang.org/api/sqladmin/v1beta4"
 	"google.golang.org/grpc"
 )
 
@@ -492,10 +493,15 @@ func setupTestContext(ctx context.Context, t *testing.T, withDatabases ...withDa
 	})
 	require.NoError(t, err)
 
-	// Unauthenticated GCP IAM client so we don't try to initialize a real one.
-	gcpIAM, err := gcpcredentials.NewIamCredentialsClient(ctx,
+	// Create unauthenticated GCP IAM and Cloud SQL clients so we don't try to
+	// initialize real ones during tests.
+	clientOptions := []option.ClientOption{
 		option.WithGRPCDialOption(grpc.WithInsecure()), // Insecure must be set for unauth client.
-		option.WithoutAuthentication())
+		option.WithoutAuthentication(),
+	}
+	gcpIAM, err := gcpcredentials.NewIamCredentialsClient(ctx, clientOptions...)
+	require.NoError(t, err)
+	cloudSQL, err := sqladmin.NewService(ctx, clientOptions...)
 	require.NoError(t, err)
 
 	// Create database service server.
@@ -521,7 +527,8 @@ func setupTestContext(ctx context.Context, t *testing.T, withDatabases ...withDa
 				Emitter: testCtx.emitter,
 			})
 		},
-		GCPIAM: gcpIAM,
+		GCPIAM:   gcpIAM,
+		CloudSQL: cloudSQL,
 	})
 	require.NoError(t, err)
 
@@ -716,6 +723,45 @@ func withRDSMySQL(name, authUser, authToken string) withDatabaseOption {
 					Region: "us-east-1",
 				},
 				// Set CA cert, otherwise we will attempt to download RDS roots.
+				CACert: testCtx.hostCA.GetTLSKeyPairs()[0].Cert,
+			})
+		_, err = testCtx.authClient.UpsertDatabaseServer(ctx, server)
+		require.NoError(t, err)
+		testCtx.mysql[name] = testMySQL{
+			db:     mysqlServer,
+			server: server,
+		}
+		return server
+	}
+}
+
+func withCloudSQLMySQL(name, authUser, authToken string) withDatabaseOption {
+	return func(t *testing.T, ctx context.Context, testCtx *testContext) types.DatabaseServer {
+		mysqlServer, err := mysql.NewTestServer(common.TestServerConfig{
+			Name:       name,
+			AuthClient: testCtx.authClient,
+			AuthUser:   authUser,
+			AuthToken:  authToken,
+			// Cloud SQL presented certificate must have <project-id>:<instance-id>
+			// in its CN.
+			CN: "project-1:instance-1",
+		})
+		require.NoError(t, err)
+		go mysqlServer.Serve()
+		t.Cleanup(func() { mysqlServer.Close() })
+		server := types.NewDatabaseServerV3(name, nil,
+			types.DatabaseServerSpecV3{
+				Protocol:      defaults.ProtocolMySQL,
+				URI:           net.JoinHostPort("localhost", mysqlServer.Port()),
+				Version:       teleport.Version,
+				Hostname:      constants.APIDomain,
+				HostID:        testCtx.hostID,
+				DynamicLabels: dynamicLabels,
+				GCP: types.GCPCloudSQL{
+					ProjectID:  "project-1",
+					InstanceID: "instance-1",
+				},
+				// Set CA cert to pass cert validation.
 				CACert: testCtx.hostCA.GetTLSKeyPairs()[0].Cert,
 			})
 		_, err = testCtx.authClient.UpsertDatabaseServer(ctx, server)
