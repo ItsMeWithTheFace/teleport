@@ -134,10 +134,10 @@ func (r *ReverseTunnelV2) CheckAndSetDefaults() error {
 	}
 
 	if strings.TrimSpace(r.Spec.ClusterName) == "" {
-		return trace.BadParameter("Reverse tunnel validation error: empty cluster name")
+		return trace.BadParameter("reverse tunnel validation error: empty cluster name")
 	}
 	if len(r.Spec.DialAddrs) == 0 {
-		return trace.BadParameter("Invalid dial address for reverse tunnel '%v'", r.Spec.ClusterName)
+		return trace.BadParameter("invalid dial address for reverse tunnel '%v'", r.Spec.ClusterName)
 	}
 
 	return nil

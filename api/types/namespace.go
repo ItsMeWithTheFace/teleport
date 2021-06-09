@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/trace"
 )
 
@@ -34,6 +35,12 @@ func NewNamespace(name string) (Namespace, error) {
 		return Namespace{}, trace.Wrap(err)
 	}
 	return n, nil
+}
+
+// DefaultNamespace returns the default namespace.
+func DefaultNamespace() Namespace {
+	namespace, _ := NewNamespace(defaults.Namespace)
+	return namespace
 }
 
 // setStaticFields sets static resource header and metadata fields.

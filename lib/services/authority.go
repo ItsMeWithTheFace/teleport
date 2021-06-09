@@ -59,28 +59,6 @@ func NewJWTAuthority(clusterName string) (types.CertAuthority, error) {
 	})
 }
 
-// NewCertAuthority returns new cert authority.
-// Replaced by types.NewCertAuthority.
-// DELETE in 7.0.0
-func NewCertAuthority(
-	caType types.CertAuthType,
-	clusterName string,
-	signingKeys [][]byte,
-	checkingKeys [][]byte,
-	roles []string,
-	signingAlg types.CertAuthoritySpecV2_SigningAlgType,
-) types.CertAuthority {
-	ca, _ := types.NewCertAuthority(types.CertAuthoritySpecV2{
-		Type:         caType,
-		ClusterName:  clusterName,
-		SigningKeys:  signingKeys,
-		CheckingKeys: checkingKeys,
-		Roles:        roles,
-		SigningAlg:   signingAlg,
-	})
-	return ca
-}
-
 // ValidateCertAuthority validates the CertAuthority
 func ValidateCertAuthority(ca types.CertAuthority) (err error) {
 	if err = ca.CheckAndSetDefaults(); err != nil {

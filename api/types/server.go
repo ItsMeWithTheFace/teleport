@@ -86,6 +86,28 @@ type Server interface {
 	DeepCopy() Server
 }
 
+// NewServer creates an instance of Server.
+func NewServer(name, kind string, spec ServerSpecV2) (Server, error) {
+	return NewServerWithLabels(name, kind, spec, map[string]string{})
+}
+
+// NewServerWithLabels is a convenience method to create
+// ServerV2 with a specific map of labels.
+func NewServerWithLabels(name, kind string, spec ServerSpecV2, labels map[string]string) (Server, error) {
+	server := &ServerV2{
+		Kind: kind,
+		Metadata: Metadata{
+			Name:   name,
+			Labels: labels,
+		},
+		Spec: spec,
+	}
+	if err := server.CheckAndSetDefaults(); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return server, nil
+}
+
 // GetVersion returns resource version
 func (s *ServerV2) GetVersion() string {
 	return s.Version

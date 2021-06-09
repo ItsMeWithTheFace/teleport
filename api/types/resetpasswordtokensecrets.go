@@ -49,7 +49,7 @@ func NewResetPasswordTokenSecrets(tokenID string) (ResetPasswordTokenSecrets, er
 		},
 	}
 	if err := secrets.CheckAndSetDefaults(); err != nil {
-		return &ResetPasswordTokenSecretsV3{}, trace.Wrap(err)
+		return nil, trace.Wrap(err)
 	}
 	return &secrets, nil
 }

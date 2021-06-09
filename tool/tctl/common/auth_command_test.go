@@ -49,9 +49,7 @@ func TestAuthSignKubeconfig(t *testing.T) {
 		Roles:        nil,
 		SigningAlg:   types.CertAuthoritySpecV2_RSA_SHA2_512,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ca.SetTLSKeyPairs([]types.TLSKeyPair{{Cert: []byte("TLS CA cert")}})
 
 	client := mockClient{

@@ -47,9 +47,7 @@ func NewStaticTokens(spec StaticTokensSpecV2) (StaticTokens, error) {
 // DefaultStaticTokens is used to get the default static tokens (empty list)
 // when nothing is specified in file configuration.
 func DefaultStaticTokens() StaticTokens {
-	token, _ := NewStaticTokens(StaticTokensSpecV2{
-		StaticTokens: []ProvisionTokenV1{},
-	})
+	token, _ := NewStaticTokens(StaticTokensSpecV2{})
 	return token
 }
 
