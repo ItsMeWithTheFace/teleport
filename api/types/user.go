@@ -64,6 +64,10 @@ type User interface {
 	GetTraits() map[string][]string
 	// GetTraits sets the trait map for this user used to populate role variables.
 	SetTraits(map[string][]string)
+	// GetAccountRecoveryStatus return user account recovery status.
+	GetAccountRecoveryStatus() AccountRecoveryStatus
+	// SetAccountRecoveryLocked sets account recovery status to locked
+	SetAccountRecoveryLocked(at time.Time, until time.Time, reason string)
 }
 
 // NewUser creates new empty user
@@ -266,6 +270,19 @@ func (u *UserV2) SetLocked(until time.Time, reason string) {
 	u.Spec.Status.IsLocked = true
 	u.Spec.Status.LockExpires = until
 	u.Spec.Status.LockedMessage = reason
+}
+
+// GetAccountRecoveryStatus returns account recovery status of the user.
+func (u *UserV2) GetAccountRecoveryStatus() AccountRecoveryStatus {
+	return u.Spec.RecoveryStatus
+}
+
+// SetAccountRecoveryLocked marks a user as locked in recovering their account.
+func (u *UserV2) SetAccountRecoveryLocked(at time.Time, until time.Time, reason string) {
+	u.Spec.RecoveryStatus.IsLocked = true
+	u.Spec.RecoveryStatus.LockedTime = at
+	u.Spec.RecoveryStatus.LockExpires = until
+	u.Spec.RecoveryStatus.LockedMessage = reason
 }
 
 // Check checks validity of all parameters

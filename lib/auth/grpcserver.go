@@ -2633,6 +2633,57 @@ func (g *GRPCServer) GetSessionEvents(ctx context.Context, req *proto.GetSession
 	return res, nil
 }
 
+// ChangePasswordWithToken changes password with a password reset token.
+func (g *GRPCServer) ChangePasswordWithToken(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error) {
+	auth, err := g.authenticate(ctx)
+	if err != nil {
+		return nil, trail.ToGRPC(err)
+	}
+
+	res, err := auth.ServerWithRoles.ChangePasswordWithToken(ctx, req)
+	if err != nil {
+		return nil, trail.ToGRPC(err)
+	}
+
+	return res, nil
+}
+
+// VerifyAccountRecoveryToken verifies a given recovery token with a user's auth creds.
+func (g *GRPCServer) VerifyAccountRecoveryToken(ctx context.Context, req *proto.VerifyRecoveryTokenRequest) (*types.ResetPasswordTokenV3, error) {
+	auth, err := g.authenticate(ctx)
+	if err != nil {
+		return nil, trail.ToGRPC(err)
+	}
+
+	resetToken, err := auth.ServerWithRoles.VerifyAccountRecoveryToken(ctx, req)
+	if err != nil {
+		return nil, trail.ToGRPC(err)
+	}
+
+	r, ok := resetToken.(*types.ResetPasswordTokenV3)
+	if !ok {
+		err = trace.BadParameter("unexpected ResetPasswordToken type %T", resetToken)
+		return nil, trail.ToGRPC(err)
+	}
+
+	return r, nil
+}
+
+// RecoverPasswordOrSecondFactor verifies a given recovery token with a user's password or second-factor.
+func (g *GRPCServer) RecoverPasswordOrSecondFactor(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error) {
+	auth, err := g.authenticate(ctx)
+	if err != nil {
+		return nil, trail.ToGRPC(err)
+	}
+
+	res, err := auth.ServerWithRoles.RecoverPasswordOrSecondFactor(ctx, req)
+	if err != nil {
+		return nil, trail.ToGRPC(err)
+	}
+
+	return res, nil
+}
+
 // GRPCServerConfig specifies GRPC server configuration
 type GRPCServerConfig struct {
 	// APIConfig is GRPC server API configuration

@@ -74,6 +74,16 @@ type Identity interface {
 	// called after successful login.
 	DeleteUserLoginAttempts(user string) error
 
+	// AddAccountRecoveryAttempt logs user account recovery attempt.
+	AddAccountRecoveryAttempt(user string, attempt types.RecoveryAttempt, ttl time.Duration) error
+
+	// GetAccountRecoveryAttempts returns user account recovery attempts.
+	GetAccountRecoveryAttempts(user string) ([]types.RecoveryAttempt, error)
+
+	// DeleteAccountRecoveryAttempts removes all account recovery attempts of a user. Should be
+	// called after successful use of a recovery token.
+	DeleteAccountRecoveryAttempts(user string) error
+
 	// GetUserByOIDCIdentity returns a user by its specified OIDC Identity, returns first
 	// user specified with this identity
 	GetUserByOIDCIdentity(id types.ExternalIdentity) (types.User, error)
@@ -207,6 +217,12 @@ type Identity interface {
 
 	// GetResetPasswordTokenSecrets returns token secrets
 	GetResetPasswordTokenSecrets(ctx context.Context, tokenID string) (types.ResetPasswordTokenSecrets, error)
+
+	// UpsertRecoveryTokens upserts a user's recovery tokens.
+	UpsertRecoveryTokens(ctx context.Context, user string, recovery types.AccountRecovery) error
+
+	// GetRecoveryTokens gets a user's recovery tokens.
+	GetRecoveryTokens(ctx context.Context, user string) (*types.AccountRecovery, error)
 
 	types.WebSessionsGetter
 	types.WebTokensGetter

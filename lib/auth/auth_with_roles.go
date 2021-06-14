@@ -1556,9 +1556,27 @@ func (a *ServerWithRoles) RotateResetPasswordTokenSecrets(ctx context.Context, t
 	return a.authServer.RotateResetPasswordTokenSecrets(ctx, tokenID)
 }
 
-func (a *ServerWithRoles) ChangePasswordWithToken(ctx context.Context, req ChangePasswordWithTokenRequest) (types.WebSession, error) {
+// ChangePasswordWithToken changes password with a password reset token.
+func (a *ServerWithRoles) ChangePasswordWithToken(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error) {
 	// Token is it's own authentication, no need to double check.
 	return a.authServer.ChangePasswordWithToken(ctx, req)
+}
+
+// VerifyAccountRecoveryToken verifies a given recovery token with a user's auth creds.
+func (a *ServerWithRoles) VerifyAccountRecoveryToken(ctx context.Context, req *proto.VerifyRecoveryTokenRequest) (types.ResetPasswordToken, error) {
+	// authentication request has it's own authentication, however this limits the requests
+	// types to proxies to make it harder to break
+	if !a.hasBuiltinRole(string(types.RoleProxy)) {
+		return nil, trace.AccessDenied("this request can be only executed by a proxy")
+	}
+
+	return a.authServer.VerifyAccountRecoveryToken(ctx, req)
+}
+
+// RecoverPasswordOrSecondFactor TODO
+func (a *ServerWithRoles) RecoverPasswordOrSecondFactor(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error) {
+	// Token is it's own auth, no need to double check.
+	return a.authServer.RecoverPasswordOrSecondFactor(ctx, req)
 }
 
 // CreateUser inserts a new user entry in a backend.

@@ -572,6 +572,36 @@ func (c *Client) CreateResetPasswordToken(ctx context.Context, req *proto.Create
 	return token, nil
 }
 
+// ChangePasswordWithToken changes user password with a reset password token.
+func (c *Client) ChangePasswordWithToken(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error) {
+	res, err := c.grpc.ChangePasswordWithToken(ctx, req, c.callOpts...)
+	if err != nil {
+		return nil, trail.FromGRPC(err)
+	}
+
+	return res, nil
+}
+
+// VerifyAccountRecoveryToken TODO
+func (c *Client) VerifyAccountRecoveryToken(ctx context.Context, req *proto.VerifyRecoveryTokenRequest) (types.ResetPasswordToken, error) {
+	res, err := c.grpc.VerifyAccountRecoveryToken(ctx, req, c.callOpts...)
+	if err != nil {
+		return nil, trail.FromGRPC(err)
+	}
+
+	return res, nil
+}
+
+// RecoverPasswordOrSecondFactor TODO
+func (c *Client) RecoverPasswordOrSecondFactor(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error) {
+	res, err := c.grpc.RecoverPasswordOrSecondFactor(ctx, req, c.callOpts...)
+	if err != nil {
+		return nil, trail.FromGRPC(err)
+	}
+
+	return res, nil
+}
+
 // GetAccessRequests retrieves a list of all access requests matching the provided filter.
 func (c *Client) GetAccessRequests(ctx context.Context, filter types.AccessRequestFilter) ([]types.AccessRequest, error) {
 	rsp, err := c.grpc.GetAccessRequests(ctx, &filter, c.callOpts...)

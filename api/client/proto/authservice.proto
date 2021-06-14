@@ -864,6 +864,41 @@ message Events {
     string LastKey = 2;
 }
 
+// ChangePasswordWithTokenRequest defines a request to change a user's password
+// with password reset token.
+message ChangePasswordWithTokenRequest {
+    // SecondFactorToken is 2nd factor token value.
+    string SecondFactorToken = 1;
+    // TokenID is this token ID.
+    string TokenID = 2;
+    // Password is user password.
+    bytes Password = 3;
+    // U2FRegisterResponse is U2F registration challenge response.
+    U2FRegisterResponse U2FRegisterResponse = 4;
+}
+
+// ChangePasswordWithTokenResponse contains web session and account recovery as a response
+// to user successfully changing their password.
+message ChangePasswordWithTokenResponse {
+    types.WebSessionV2 webSession = 1;
+    repeated string recoveryTokens = 2;
+}
+
+// VerifyRecoveryTokenRequest defines a request to verify a user's password
+// or second-factor and given recovery token.
+message VerifyRecoveryTokenRequest {
+    // username is the user's username.
+    string username = 1;
+    // recoveryToken is one of the user's recovery token.
+    bytes recoveryToken = 2;
+    // password is user password.
+    bytes password = 3;
+    // secondFactorToken is otp value.
+    string secondFactorToken = 4;
+    // u2fSignResponse is U2F registration challenge response.
+    U2FResponse u2fSignResponse = 5;
+}
+
 // AuthService is authentication/authorization service implementation
 service AuthService {
     // SendKeepAlives allows node to send a stream of keep alive requests
@@ -1120,4 +1155,14 @@ service AuthService {
     rpc GetEvents(GetEventsRequest) returns (Events);
     // In-session request for audit events.
     rpc GetSessionEvents(GetSessionEventsRequest) returns (Events);
+
+    // ChangePasswordWithToken changes a user's password with password reset token.
+    rpc ChangePasswordWithToken(ChangePasswordWithTokenRequest)
+        returns (ChangePasswordWithTokenResponse);
+    // VerifyAccountRecoveryToken verifies a given recovery token with a user's auth creds.
+    rpc VerifyAccountRecoveryToken(VerifyRecoveryTokenRequest) returns (types.ResetPasswordTokenV3);
+    // RecoverPasswordOrSecondFactor recover's a user's account by re-setting their password or
+    // second factor.
+    rpc RecoverPasswordOrSecondFactor(ChangePasswordWithTokenRequest)
+        returns (ChangePasswordWithTokenResponse);
 }

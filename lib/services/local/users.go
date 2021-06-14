@@ -1061,6 +1061,122 @@ func (s *IdentityService) GetGithubAuthRequest(stateToken string) (*services.Git
 	return &req, nil
 }
 
+// GetRecoveryTokens returns user's recovery codes.
+func (s *IdentityService) GetRecoveryTokens(ctx context.Context, user string) (*types.AccountRecovery, error) {
+	if user == "" {
+		return nil, trace.BadParameter("missing parameter username")
+	}
+
+	item, err := s.Get(ctx, backend.Key(webPrefix, usersPrefix, user, recoveryTokensPrefix))
+	if err != nil {
+		if trace.IsNotFound(err) {
+			return nil, trace.NotFound("user %q is not found", user)
+		}
+		return nil, trace.Wrap(err)
+	}
+
+	var tokens types.AccountRecovery
+	if err := json.Unmarshal(item.Value, &tokens); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return &tokens, nil
+}
+
+// UpsertRecoveryTokens creates or updates user's account recovery info.
+// Each token are hashed before upsert.
+func (s *IdentityService) UpsertRecoveryTokens(ctx context.Context, user string, recovery types.AccountRecovery) error {
+	if user == "" {
+		return trace.BadParameter("missing parameter username")
+	}
+
+	if err := recovery.CheckAndSetDefaults(); err != nil {
+		return trace.Wrap(err)
+	}
+
+	jsonEncoding, err := json.Marshal(recovery)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	item := backend.Item{
+		Key:   backend.Key(webPrefix, usersPrefix, user, recoveryTokensPrefix),
+		Value: jsonEncoding,
+	}
+
+	if _, err := s.Put(ctx, item); err != nil {
+		return trace.Wrap(err)
+	}
+
+	return nil
+}
+
+// AddRecoveryAttempt logs user's recovery attempt.
+func (s *IdentityService) AddAccountRecoveryAttempt(user string, attempt types.RecoveryAttempt, ttl time.Duration) error {
+	if user == "" {
+		return trace.BadParameter("missing username")
+	}
+
+	if attempt.Time.IsZero() {
+		return trace.BadParameter("missing parameter time")
+	}
+
+	value, err := json.Marshal(attempt)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	item := backend.Item{
+		Key:     backend.Key(webPrefix, usersPrefix, user, recoveryAttemptsPrefix, uuid.New()),
+		Value:   value,
+		Expires: backend.Expiry(s.Clock(), ttl),
+	}
+
+	_, err = s.Put(context.TODO(), item)
+
+	return trace.Wrap(err)
+}
+
+// GetRecoveryAttempts returns user's recovery attempts.
+func (s *IdentityService) GetAccountRecoveryAttempts(user string) ([]types.RecoveryAttempt, error) {
+	if user == "" {
+		return nil, trace.BadParameter("missing username")
+	}
+
+	startKey := backend.Key(webPrefix, usersPrefix, user, recoveryAttemptsPrefix)
+	result, err := s.GetRange(context.TODO(), startKey, backend.RangeEnd(startKey), backend.NoLimit)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	out := make([]types.RecoveryAttempt, len(result.Items))
+	for i, item := range result.Items {
+		var a types.RecoveryAttempt
+		if err := json.Unmarshal(item.Value, &a); err != nil {
+			return nil, trace.Wrap(err)
+		}
+		out[i] = a
+	}
+
+	sort.Sort(types.SortedRecoveryAttempts(out))
+
+	return out, nil
+}
+
+// DeleteRecoveryAttempts removes all recovery attempts of a user. Should be
+// called after successful recovery.
+func (s *IdentityService) DeleteAccountRecoveryAttempts(user string) error {
+	if user == "" {
+		return trace.BadParameter("missing username")
+	}
+	startKey := backend.Key(webPrefix, usersPrefix, user, recoveryAttemptsPrefix)
+	err := s.DeleteRange(context.TODO(), startKey, backend.RangeEnd(startKey))
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return nil
+}
+
 const (
 	webPrefix              = "web"
 	usersPrefix            = "users"
@@ -1078,6 +1194,8 @@ const (
 	usedTOTPTTL            = 30 * time.Second
 	mfaDevicePrefix        = "mfa"
 	u2fSignChallengePrefix = "u2fsignchallenge"
+	recoveryTokensPrefix   = "recoverytokens"
+	recoveryAttemptsPrefix = "recoveryattempts"
 
 	// DELETE IN 7.0: these prefixes are migrated to mfaDevicePrefix in 6.0 on
 	// first startup.

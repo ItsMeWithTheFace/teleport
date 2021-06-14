@@ -1147,12 +1147,8 @@ func (c *Client) GetSignupU2FRegisterRequest(token string) (*u2f.RegisterChallen
 }
 
 // ChangePasswordWithToken changes user password with ResetPasswordToken
-func (c *Client) ChangePasswordWithToken(ctx context.Context, req ChangePasswordWithTokenRequest) (types.WebSession, error) {
-	out, err := c.PostJSON(c.Endpoint("web", "password", "token"), req)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return services.UnmarshalWebSession(out.Bytes())
+func (c *Client) ChangePasswordWithToken(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error) {
+	return c.APIClient.ChangePasswordWithToken(ctx, req)
 }
 
 // CreateOIDCAuthRequest creates OIDCAuthRequest
@@ -1917,7 +1913,13 @@ type IdentityService interface {
 	CreateResetPasswordToken(ctx context.Context, req CreateResetPasswordTokenRequest) (types.ResetPasswordToken, error)
 
 	// ChangePasswordWithToken changes password with token
-	ChangePasswordWithToken(ctx context.Context, req ChangePasswordWithTokenRequest) (types.WebSession, error)
+	ChangePasswordWithToken(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error)
+
+	// VerifyAccountRecoveryToken registers a new password or second factor.
+	VerifyAccountRecoveryToken(ctx context.Context, req *proto.VerifyRecoveryTokenRequest) (types.ResetPasswordToken, error)
+
+	// RecoverPasswordOrSecondFactor TODO
+	RecoverPasswordOrSecondFactor(ctx context.Context, req *proto.ChangePasswordWithTokenRequest) (*proto.ChangePasswordWithTokenResponse, error)
 
 	// GetResetPasswordToken returns token
 	GetResetPasswordToken(ctx context.Context, username string) (types.ResetPasswordToken, error)

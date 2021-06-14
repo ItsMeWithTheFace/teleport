@@ -42,6 +42,8 @@ const (
 	ResetPasswordTokenTypeInvite = "invite"
 	// ResetPasswordTokenTypePassword indicates set new password UI flow
 	ResetPasswordTokenTypePassword = "password"
+	// ResetPasswordTokenTypeRecovery indicates set new password UI flow
+	ResetPasswordTokenTypeRecovery = "recovery"
 )
 
 // CreateResetPasswordTokenRequest is a request to create a new reset password token
@@ -90,6 +92,9 @@ func (r *CreateResetPasswordTokenRequest) CheckAndSetDefaults() error {
 				"failed to create reset password token: maximum token TTL is %v hours",
 				defaults.MaxChangePasswordTokenTTL)
 		}
+	case ResetPasswordTokenTypeRecovery:
+		r.TTL = types.MaxAccountRecoveryTokenTTL
+
 	default:
 		return trace.BadParameter("unknown reset password token request type(%v)", r.Type)
 	}

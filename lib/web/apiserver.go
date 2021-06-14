@@ -275,9 +275,13 @@ func NewHandler(cfg Config, opts ...HandlerOption) (*RewritingHandler, error) {
 	h.DELETE("/webapi/users/:username", h.WithAuth(h.deleteUserHandle))
 
 	h.GET("/webapi/users/password/token/:token", httplib.MakeHandler(h.getResetPasswordTokenHandle))
-	h.PUT("/webapi/users/password/token", httplib.WithCSRFProtection(h.changePasswordWithToken))
 	h.PUT("/webapi/users/password", h.WithAuth(h.changePassword))
 	h.POST("/webapi/users/password/token", h.WithAuth(h.createResetPasswordToken))
+
+	// Recovery related endpoints
+	h.PUT("/webapi/users/password/token", httplib.WithCSRFProtection(h.changePasswordWithToken)) // returns recovery tokens if 2nd factor is on
+	h.PUT("/webapi/recovery", httplib.WithCSRFProtection(h.verifyAccountRecoveryToken))
+	h.PUT("/webapi/recovery/reset", httplib.WithCSRFProtection(h.recoverPasswordOrSecondFactor))
 
 	// Issues SSH temp certificates based on 2FA access creds
 	h.POST("/webapi/ssh/certs", httplib.MakeHandler(h.createSSHCert))
@@ -824,6 +828,7 @@ func (h *Handler) getWebConfig(w http.ResponseWriter, r *http.Request, p httprou
 	webCfg := ui.WebConfig{
 		Auth:            authSettings,
 		CanJoinSessions: canJoinSessions,
+		IsCloud:         h.clusterFeatures.GetCloud(),
 	}
 
 	resource, err := h.cfg.ProxyClient.GetClusterName()
@@ -1411,19 +1416,128 @@ func (h *Handler) changePasswordWithToken(w http.ResponseWriter, r *http.Request
 		return nil, trace.Wrap(err)
 	}
 
-	sess, err := h.auth.proxyClient.ChangePasswordWithToken(r.Context(), req)
+	fmt.Printf("------- [change] Changepasswordiwthtoken: %+v: \n\n", req)
+
+	var u2f *proto.U2FRegisterResponse
+	if req.U2FRegisterResponse != nil {
+		u2f = &proto.U2FRegisterResponse{
+			RegistrationData: req.U2FRegisterResponse.RegistrationData,
+			ClientData:       req.U2FRegisterResponse.ClientData,
+		}
+	}
+
+	res, err := h.auth.proxyClient.ChangePasswordWithToken(r.Context(), &proto.ChangePasswordWithTokenRequest{
+		SecondFactorToken:   req.SecondFactorToken,
+		TokenID:             req.TokenID,
+		Password:            req.Password,
+		U2FRegisterResponse: u2f,
+	})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	ctx, err := h.auth.newSessionContext(sess.GetUser(), sess.GetName())
+	ctx, err := h.auth.newSessionContext(res.GetWebSession().GetUser(), res.GetWebSession().GetName())
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	if err := SetSessionCookie(w, sess.GetUser(), sess.GetName()); err != nil {
+	if err := SetSessionCookie(w, res.GetWebSession().GetUser(), res.GetWebSession().GetName()); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	return newSessionResponse(ctx)
+	// TODO lisa, is this really needed?
+	if _, err := newSessionResponse(ctx); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	fmt.Println("------- [change] recovery tokens for ", res.GetWebSession().GetUser(), " tokens: ", res.GetRecoveryTokens())
+	return res.GetRecoveryTokens(), nil
+}
+
+// RecoveryRequest defines a request to recover password or second factor.
+type VerifyAccountRecoveryTokenRequest struct {
+	// Username is user's username.
+	Username string `json:"username"`
+	// RecoveryToken is one of the user's recovery token.
+	RecoveryToken string `json:"recoveryToken"`
+	// Password is user password.
+	Password string `json:"password"`
+	// SecondFactorToken is the otp value.
+	SecondFactorToken string `json:"secondFactorToken"`
+	// U2FSignResponse is u2f sign response for a u2f challenge.
+	U2FSignResponse *u2f.AuthenticateChallengeResponse `json:"u2fSignResponse"`
+}
+
+func (h *Handler) verifyAccountRecoveryToken(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
+	var req VerifyAccountRecoveryTokenRequest
+	if err := httplib.ReadJSON(r, &req); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	fmt.Printf("------- [verify] VerifyAccountRecoveryTokenRequest: %+v: \n\n", req)
+	fmt.Println("------ [verify] u2fSignresponse null? ", req.U2FSignResponse == nil)
+
+	var u2f *proto.U2FResponse
+	if req.U2FSignResponse != nil {
+		u2f = &proto.U2FResponse{
+			KeyHandle:  req.U2FSignResponse.KeyHandle,
+			ClientData: req.U2FSignResponse.ClientData,
+			Signature:  req.U2FSignResponse.SignatureData,
+		}
+	}
+
+	resetToken, err := h.auth.proxyClient.VerifyAccountRecoveryToken(r.Context(), &proto.VerifyRecoveryTokenRequest{
+		Username:        req.Username,
+		RecoveryToken:   []byte(req.RecoveryToken),
+		Password:        []byte(req.Password),
+		U2FSignResponse: u2f,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// RotateResetPasswordTokenSecrets rotates secrets for a given tokenID.
+	// It gets called every time a user fetches 2nd-factor secrets during registration attempt.
+	// This ensures that an attacker that gains the ResetPasswordToken link can not view it,
+	// extract the OTP key from the QR code, then allow the user to signup with
+	// the same OTP token.
+	secrets, err := h.auth.proxyClient.RotateResetPasswordTokenSecrets(r.Context(), resetToken.GetName())
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return ui.ResetPasswordToken{
+		TokenID: resetToken.GetName(),
+		User:    resetToken.GetUser(),
+		QRCode:  secrets.GetQRCode(),
+	}, nil
+}
+
+func (h *Handler) recoverPasswordOrSecondFactor(w http.ResponseWriter, r *http.Request, p httprouter.Params) (interface{}, error) {
+	var req auth.ChangePasswordWithTokenRequest
+	if err := httplib.ReadJSON(r, &req); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	fmt.Printf("---- recover request: %+v\n", req)
+
+	var u2f *proto.U2FRegisterResponse
+	if req.U2FRegisterResponse != nil {
+		u2f = &proto.U2FRegisterResponse{
+			RegistrationData: req.U2FRegisterResponse.RegistrationData,
+			ClientData:       req.U2FRegisterResponse.ClientData,
+		}
+	}
+
+	res, err := h.auth.proxyClient.RecoverPasswordOrSecondFactor(r.Context(), &proto.ChangePasswordWithTokenRequest{
+		TokenID:             req.TokenID,
+		Password:            req.Password,
+		SecondFactorToken:   req.SecondFactorToken,
+		U2FRegisterResponse: u2f,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return res.GetRecoveryTokens(), nil
 }
 
 // createResetPasswordToken allows a UI user to reset a user's password.

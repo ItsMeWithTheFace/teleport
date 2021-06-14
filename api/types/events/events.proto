@@ -606,6 +606,30 @@ message UserPasswordChange {
         [ (gogoproto.nullable) = false, (gogoproto.embed) = true, (gogoproto.jsontag) = "" ];
 }
 
+// RecoveryTokenGenerate is emitted when a user's recovery tokens are generated.
+message RecoveryTokenGenerate {
+    // Metadata is a common event metadata.
+    Metadata Metadata = 1
+        [ (gogoproto.nullable) = false, (gogoproto.embed) = true, (gogoproto.jsontag) = "" ];
+    // User is a common user event metadata.
+    UserMetadata User = 2
+        [ (gogoproto.nullable) = false, (gogoproto.embed) = true, (gogoproto.jsontag) = "" ];
+}
+
+// RecoveryTokenUsed is emitted when a user's recovery tokens are used successfully or
+// unsuccessfully..
+message RecoveryTokenUsed {
+    // Metadata is a common event metadata.
+    Metadata Metadata = 1
+        [ (gogoproto.nullable) = false, (gogoproto.embed) = true, (gogoproto.jsontag) = "" ];
+    // User is a common user event metadata.
+    UserMetadata User = 2
+        [ (gogoproto.nullable) = false, (gogoproto.embed) = true, (gogoproto.jsontag) = "" ];
+    // Status contains fields to indicate whether attempt was successful or not.
+    Status Status = 3
+        [ (gogoproto.nullable) = false, (gogoproto.embed) = true, (gogoproto.jsontag) = "" ];
+}
+
 // AccessRequestCreate is emitted when access request has been created or updated
 message AccessRequestCreate {
     // Metadata is a common event metadata
@@ -1319,6 +1343,8 @@ message OneOf {
         events.BillingInformationUpdate BillingInformationUpdate = 46;
         events.BillingCardCreate BillingCardCreate = 47;
         events.BillingCardDelete BillingCardDelete = 48;
+        events.RecoveryTokenGenerate RecoveryTokenGenerate = 49;
+        events.RecoveryTokenUsed RecoveryTokenUsed = 50;
     }
 }
 

@@ -1410,6 +1410,10 @@ message UserSpecV2 {
     // LocalAuths hold sensitive data necessary for performing local
     // authentication
     LocalAuthSecrets LocalAuth = 9 [ (gogoproto.jsontag) = "local_auth,omitempty" ];
+
+    // RecoveryStatus holds the user's account recovery attempts.
+    AccountRecoveryStatus RecoveryStatus = 10
+        [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "recovery_status,omitempty" ];
 }
 
 // ExternalIdentity is OpenID Connect/SAML or Github identity that is linked
@@ -2102,4 +2106,45 @@ message TrustedClusterSpecV2 {
     // RoleMap specifies role mappings to remote roles.
     repeated RoleMapping RoleMap = 6
         [ (gogoproto.nullable) = false, (gogoproto.jsontag) = "role_map,omitempty" ];
+}
+
+// AccountRecovery holds a user's recovery information.
+message AccountRecovery {
+    // kind is a resource kind.
+    string kind = 1;
+    // version is resource version.
+    string version = 2;
+    // tokens hold a list of recovery tokens.
+    repeated AccountRecoveryToken tokens = 3 [ (gogoproto.nullable) = false ];
+    // created is when the tokens were generated.
+    google.protobuf.Timestamp created = 4
+        [ (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
+}
+
+// AccountRecoveryToken describes a recovery token.
+message AccountRecoveryToken {
+    // value is the token value.
+    bytes value = 1 [ (gogoproto.jsontag) = "value" ];
+    // is_used determines if the recovery token was used.
+    bool is_used = 2 [ (gogoproto.jsontag) = "isUsed" ];
+}
+
+// AccountRecoveryStatus is the status of account recovery attempts.
+message AccountRecoveryStatus {
+    // IsLocked tells us if user is locked from trying to recover their account.
+    bool IsLocked = 1 [ (gogoproto.jsontag) = "is_locked" ];
+    // LockedMessage contains the message in case if user is locked.
+    string LockedMessage = 2 [ (gogoproto.jsontag) = "locked_message,omitempty" ];
+    // LockedTime contains time when user was locked.
+    google.protobuf.Timestamp LockedTime = 3 [
+        (gogoproto.stdtime) = true,
+        (gogoproto.nullable) = false,
+        (gogoproto.jsontag) = "locked_time,omitempty"
+    ];
+    // LockExpires contains time when this lock will expire.
+    google.protobuf.Timestamp LockExpires = 4 [
+        (gogoproto.stdtime) = true,
+        (gogoproto.nullable) = false,
+        (gogoproto.jsontag) = "lock_expires,omitempty"
+    ];
 }

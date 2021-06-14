@@ -49,6 +49,14 @@ func ToOneOf(in AuditEvent) (*OneOf, error) {
 		out.Event = &OneOf_UserPasswordChange{
 			UserPasswordChange: e,
 		}
+	case *RecoveryTokenGenerate:
+		out.Event = &OneOf_RecoveryTokenGenerate{
+			RecoveryTokenGenerate: e,
+		}
+	case *RecoveryTokenUsed:
+		out.Event = &OneOf_RecoveryTokenUsed{
+			RecoveryTokenUsed: e,
+		}
 	case *SessionStart:
 		out.Event = &OneOf_SessionStart{
 			SessionStart: e,
@@ -228,6 +236,10 @@ func FromOneOf(in OneOf) (AuditEvent, error) {
 	} else if e := in.GetUserDelete(); e != nil {
 		return e, nil
 	} else if e := in.GetUserPasswordChange(); e != nil {
+		return e, nil
+	} else if e := in.GetRecoveryTokenGenerate(); e != nil {
+		return e, nil
+	} else if e := in.GetRecoveryTokenUsed(); e != nil {
 		return e, nil
 	} else if e := in.GetSessionStart(); e != nil {
 		return e, nil

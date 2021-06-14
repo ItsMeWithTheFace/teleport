@@ -211,6 +211,9 @@ const (
 	// KindBilling represents access to cloud billing features
 	KindBilling = "billing"
 
+	// KindRecoveryToken represents recovery tokens for users with second factors.
+	KindRecoveryToken = "recovery_token"
+
 	// V3 is the third version of resources.
 	V3 = "v3"
 

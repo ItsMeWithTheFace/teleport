@@ -392,6 +392,11 @@ const (
 	MFADeviceAddEvent = "mfa.add"
 	// MFADeviceDeleteEvent is an event type for users deleting MFA devices.
 	MFADeviceDeleteEvent = "mfa.delete"
+
+	// RecoveryTokenGeneratedEvent is an event type for generating a user's recovery tokens.
+	RecoveryTokenGeneratedEvent = "recovery_token.generated"
+	// RecoveryTokenUsedEvent is an event type when a recovery token was used.
+	RecoveryTokenUsedEvent = "recovery_token.used"
 )
 
 const (
