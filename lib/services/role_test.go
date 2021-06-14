@@ -2843,6 +2843,24 @@ func TestCheckAccessToKubernetes(t *testing.T) {
 	}
 }
 
+// Default constructors ignore errors and return nil in the case of an error.
+// This should never happen unless the validation/default setting logic is broken.
+func TestDefaultConstructors(t *testing.T) {
+	require.NotNil(t, NewAdminRole())
+	require.NotNil(t, NewImplicitRole())
+	user, err := types.NewUser("user")
+	require.NoError(t, err)
+	require.NotNil(t, RoleForUser(user))
+	require.NotNil(t, NewDowngradedOSSAdminRole())
+	require.NotNil(t, NewOSSGithubRole([]string{}, []string{}, []string{}))
+	ca, err := types.NewCertAuthority(types.CertAuthoritySpecV2{
+		ClusterName: "root",
+		Type:        types.HostCA,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, RoleForCertAuthority(ca))
+}
+
 // BenchmarkCheckAccessToServer tests how long it takes to run
 // CheckAccessToServer across 4,000 nodes for 5 roles each with 5 logins each.
 //
